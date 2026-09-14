@@ -36,20 +36,18 @@ def gerar_horarios_padrao():
     horarios = []
     
     # Manhã: 8:30 - 12:00
-    h_m = list(range(8, 12))
-    for h in h_m:
-        for m in (30 if h == 8 else 0):
-            horarios.append({'horario': f'{h:02d}:{m:02d}', 'periodo': 'manha'})
+    horarios.append({'horario': '08:30', 'periodo': 'manha'})
+    for h in range(9, 12):
+        horarios.append({'horario': f'{h:02d}:00', 'periodo': 'manha'})
+        horarios.append({'horario': f'{h:02d}:30', 'periodo': 'manha'})
     
     # Tarde: 14:00 - 18:00
-    h_t = list(range(14, 18))
-    for h in h_t:
+    for h in range(14, 18):
         horarios.append({'horario': f'{h:02d}:00', 'periodo': 'tarde'})
         horarios.append({'horario': f'{h:02d}:30', 'periodo': 'tarde'})
     
     # Noite: 19:00 - 21:00
-    h_n = list(range(19, 21))
-    for h in h_n:
+    for h in range(19, 21):
         horarios.append({'horario': f'{h:02d}:00', 'periodo': 'noite'})
         horarios.append({'horario': f'{h:02d}:30', 'periodo': 'noite'})
     
@@ -77,6 +75,11 @@ def listar_horarios_diarios():
         (data_str,)
     )
     horarios = cur.fetchall() or []
+    
+    # Converter time para string
+    for h in horarios:
+        if 'horario' in h and hasattr(h['horario'], 'isoformat'):
+            h['horario'] = h['horario'].isoformat()
     
     cur.close()
     conn.close()
@@ -162,6 +165,11 @@ def listar_agendamentos():
         (status,)
     )
     agendamentos = cur.fetchall() or []
+    
+    # Converter time para string (JSON serializable)
+    for a in agendamentos:
+        if 'horario' in a and hasattr(a['horario'], 'isoformat'):
+            a['horario'] = a['horario'].isoformat()
     
     cur.close()
     conn.close()
