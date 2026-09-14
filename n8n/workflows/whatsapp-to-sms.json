@@ -1,0 +1,198 @@
+{
+  "name": "WhatsApp para SMS - Agendamento",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-receive",
+      "name": "Receber Mensagem",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.event }}",
+              "operation": "equals",
+              "value2": "messages.upsert"
+            }
+          ]
+        }
+      },
+      "id": "filter-event",
+      "name": "Filtrar Evento",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = $input.item.json.body;\nconst message = body.data?.message;\n\nif (!message) {\n  return [];\n}\n\nconst numero = body.data.key?.remoteJid?.replace('@s.whatsapp.net', '') || '';\nconst mensagem = message.conversation || message.extendedTextMessage?.text || '';\nconst nomeContato = body.data.pushName || '';\nconst timestamp = new Date(body.data.messageTimestamp * 1000).toISOString();\n\nif (!numero || !mensagem) {\n  return [];\n}\n\nreturn {\n  json: {\n    numero,\n    mensagem,\n    nome_contato: nomeContato,\n    timestamp\n  }\n};"
+      },
+      "id": "extract-data",
+      "name": "Extrair Dados",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/whatsapp/mensagens",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ JSON.stringify({ numero: $json.numero, mensagem: $json.mensagem, nome_contato: $json.nome_contato, timestamp: $json.timestamp }) }}"
+      },
+      "id": "save-to-db",
+      "name": "Salvar no Banco",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/sms/numeros",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "get-numbers",
+      "name": "Buscar Números SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const numeros = $input.item.json.numeros || [];\nconst mensagemOriginal = $('Extrair Dados').item.json.mensagem;\nconst numeroOriginal = $('Extrair Dados').item.json.numero;\nconst nomeContato = $('Extrair Dados').item.json.nome_contato;\n\nif (numeros.length === 0) {\n  return [];\n}\n\nconst resultados = numeros\n  .filter(n => n.ativado)\n  .map(n => ({\n    json: {\n      numero_destino: n.numero,\n      mensagem_sms: `Nova msg WhatsApp de ${nomeContato || numeroOriginal}: ${mensagemOriginal.substring(0, 100)}`,\n      numero_original: numeroOriginal\n    }\n  }));\n\nreturn resultados;"
+      },
+      "id": "prepare-sms",
+      "name": "Preparar SMS",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.TOTAL_VOICE_URL }}/sms",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "bodyParametersJson": "={{ JSON.stringify({ numero_destino: $json.numero_destino, mensagem: $json.mensagem_sms }) }}",
+        "headers": {
+          "Authorization": "Bearer {{$env.TOTAL_VOICE_API_KEY}}"
+        }
+      },
+      "id": "send-sms",
+      "name": "Enviar SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ sucesso: true, mensagem: 'Processado' }) }}"
+      },
+      "id": "respond",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    }
+  ],
+  "connections": {
+    "Receber Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Evento": {
+      "main": [
+        [
+          {
+            "node": "Extrair Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Dados": {
+      "main": [
+        [
+          {
+            "node": "Salvar no Banco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar no Banco": {
+      "main": [
+        [
+          {
+            "node": "Buscar Números SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Números SMS": {
+      "main": [
+        [
+          {
+            "node": "Preparar SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar SMS": {
+      "main": [
+        [
+          {
+            "node": "Enviar SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar SMS": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

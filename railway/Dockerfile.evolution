@@ -1,0 +1,25 @@
+# Dockerfile Evolution API (monitor WhatsApp)
+# Fonte: https://github.com/EvolutionAPI/evolution-api
+
+FROM node:20-slim
+
+WORKDIR /app
+
+# Dependências
+RUN apt-get update && apt-get install -y \
+    curl \
+    ffmpeg \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g pnpm
+
+# Clonar Evolution API
+RUN git clone https://github.com/EvolutionAPI/evolution-api.git .
+
+RUN pnpm install
+
+# Porta padrão
+EXPOSE 8080
+
+CMD ["pnpm", "start"]

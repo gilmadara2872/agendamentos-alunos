@@ -1,0 +1,69 @@
+# Docker Compose - Desenvolvimento local
+version: '3.8'
+
+services:
+  # ===========================================
+  # BACKEND FLASK
+  # ===========================================
+  backend:
+    build:
+      context: .
+      dockerfile: railway/Dockerfile.backend
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - SUPABASE_URL=https://SEU_PROJETO.supabase.co
+      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      - TOTAL_VOICE_URL=https://api2.totalvoice.com.br
+      - TOTAL_VOICE_API_KEY=sua_chave_aqui
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # ===========================================
+  # NEXT.JS FRONTEND
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+
+  # ===========================================
+  # EVOLUTION API (MONITOR WHATSAPP)
+  # ===========================================
+  evolution:
+    build:
+      context: .
+      dockerfile: railway/Dockerfile.evolution
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_ENABLED=false
+    restart: unless-stopped
+
+  # ===========================================
+  # N8N (AUTOMAÇÃO)
+  # ===========================================
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - WEBHOOK_URL=http://localhost:5678/
+    volumes:
+      - ./n8n:/home/node/.n8n
+    depends_on:
+      - backend
+      - evolution
+    restart: unless-stopped
