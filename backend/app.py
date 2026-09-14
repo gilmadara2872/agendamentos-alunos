@@ -93,7 +93,7 @@ def listar_horarios_diarios():
 
 @app.route('/api/agendar', methods=['POST'])
 def agendar_atendimento():
-    """Registra novo agendamento"""
+    """Registra novo agendamento e marca horário como agendado (atômico)"""
     dados = request.get_json()
     
     nome = dados.get('nome', '').strip()
@@ -119,37 +119,57 @@ def agendar_atendimento():
     conn = get_connection()
     cur = conn.cursor()
     
-    # Verificar se horário está livre
-    cur.execute(
-        "SELECT status FROM horarios WHERE data = %s AND horario = %s",
-        (data_str, horario)
-    )
-    existente = cur.fetchone()
-    
-    if existente and existente['status'] != 'livre':
+    # Transação atômica: lock da linha + insert + update status
+    try:
+        # Lock na linha do horário para evitar race condition
+        cur.execute(
+            "SELECT status FROM horarios WHERE data = %s AND horario = %s FOR UPDATE",
+            (data_str, horario)
+        )
+        existente = cur.fetchone()
+        
+        if not existente:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'erro': 'Horário não encontrado'}), 404
+        
+        if existente['status'] != 'livre':
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'erro': 'Horário já ocupado'}), 409
+        
+        # Atualizar status na tabela horarios
+        cur.execute(
+            "UPDATE horarios SET status = 'agendado' WHERE data = %s AND horario = %s",
+            (data_str, horario)
+        )
+        
+        # Criar agendamento
+        cur.execute(
+            """INSERT INTO agendamentos 
+               (data, horario, nome, matricula, email, telefone, motivo, status, criado_em)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+               RETURNING id""",
+            (data_str, horario, nome, matricula, email or None, telefone or None, motivo or None, 'pendente')
+        )
+        agendamento_id = cur.fetchone()['id']
+        
+        conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'erro': 'Horário já ocupado'}), 409
-    
-    # Criar agendamento
-    cur.execute(
-        """INSERT INTO agendamentos 
-           (data, horario, nome, matricula, email, telefone, motivo, status, criado_em)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-           RETURNING id""",
-        (data_str, horario, nome, matricula, email or None, telefone or None, motivo or None, 'pendente')
-    )
-    agendamento_id = cur.fetchone()['id']
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': 'Agendamento criado com sucesso! Aguardando confirmação.',
-        'id': agendamento_id
-    }), 201
+        
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Agendamento criado com sucesso! Aguardando confirmação.',
+            'id': agendamento_id
+        }), 201
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return jsonify({'erro': str(e)}), 500
 
 
 @app.route('/api/admin/agendamentos', methods=['GET'])
@@ -275,32 +295,64 @@ def liberar_horario():
         return jsonify({'erro': 'Horário não encontrado'}), 404
 
 
-@app.route('/api/admin/horarios/inicializar', methods=['POST'])
-def inicializar_horarios_mensal():
-    """Inicializa horários padrão para o mês atual"""
-    hoje = date.today()
-    horarios_padrao = gerar_horarios_padrao()
+@app.route('/api/admin/horarios/adicionar', methods=['POST'])
+def adicionar_horarios():
+    """Adiciona horários de atendimento (um ou vários)"""
+    dados = request.get_json()
+    
+    data_str = dados.get('data')
+    horarios = dados.get('horarios', [])  # lista de horários ['08:00', '08:30', ...]
+    
+    if not data_str or not horarios:
+        return jsonify({'erro': 'Data e lista de horários são obrigatórios'}), 400
+    
+    try:
+        datetime.strptime(data_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'erro': 'Formato de data inválido. Use YYYY-MM-DD'}), 400
+    
+    for h in horarios:
+        try:
+            datetime.strptime(h, '%H:%M')
+        except ValueError:
+            return jsonify({'erro': f'Horário inválido: {h}. Use HH:MM'}), 400
     
     conn = get_connection()
     cur = conn.cursor()
     
-    criados = 0
-    for dia in range(1, 32):
-        data_str = f'{hoje.year}-{hoje.month:02d}-{dia:02d}'
+    resultados = []
+    for horario in horarios:
+        # Verificar se já existe
+        cur.execute(
+            "SELECT id, status FROM horarios WHERE data = %s AND horario = %s",
+            (data_str, horario)
+        )
+        existente = cur.fetchone()
         
-        for h in horarios_padrao:
+        if existente:
+            # Se estiver bloqueado/inexistente, reativar como livre
             cur.execute(
-                "SELECT id FROM horarios WHERE data = %s AND horario = %s",
-                (data_str, h['horario'])
+                "UPDATE horarios SET status = 'livre', observacao = '', eh_ativo = TRUE WHERE id = %s",
+                (existente['id'],)
             )
-            if not cur.fetchone():
-                cur.execute(
-                    """INSERT INTO horarios 
-                       (data, horario, periodo, status, observacao, eh_ativo, criado_em)
-                       VALUES (%s, %s, %s, 'livre', '', TRUE, NOW())""",
-                    (data_str, h['horario'], h['periodo'])
-                )
-                criados += 1
+            resultados.append({'horario': horario, 'acao': 'reativado'})
+        else:
+            # Determinar período
+            hora = int(horario.split(':')[0])
+            if hora < 12:
+                periodo = 'manha'
+            elif hora < 18:
+                periodo = 'tarde'
+            else:
+                periodo = 'noite'
+            
+            cur.execute(
+                """INSERT INTO horarios 
+                   (data, horario, periodo, status, eh_ativo, criado_em)
+                   VALUES (%s, %s, %s, 'livre', TRUE, NOW())""",
+                (data_str, horario, periodo)
+            )
+            resultados.append({'horario': horario, 'acao': 'criado'})
     
     conn.commit()
     cur.close()
@@ -308,8 +360,138 @@ def inicializar_horarios_mensal():
     
     return jsonify({
         'sucesso': True,
-        'mensagem': f'{criados} horários criados',
-        'total': criados
+        'mensagem': f'{len(resultados)} horários processados',
+        'resultados': resultados
+    })
+
+
+@app.route('/api/admin/horarios/remover', methods=['POST'])
+def remover_horarios():
+    """Remove horários de atendimento (um ou vários) de uma data"""
+    dados = request.get_json()
+    
+    data_str = dados.get('data')
+    horarios = dados.get('horarios', [])  # lista de horários ou ['todos']
+    
+    if not data_str or not horarios:
+        return jsonify({'erro': 'Data e lista de horários são obrigatórios'}), 400
+    
+    try:
+        datetime.strptime(data_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'erro': 'Formato de data inválido. Use YYYY-MM-DD'}), 400
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    if 'todos' in horarios:
+        # Verificar se algum horário tem agendamento pendente
+        cur.execute(
+            "SELECT COUNT(*) as total FROM agendamentos WHERE data = %s AND status = 'pendente'",
+            (data_str,)
+        )
+        pendentes = cur.fetchone()['total']
+        if pendentes > 0:
+            cur.close()
+            conn.close()
+            return jsonify({'erro': f'Não é possível remover: {pendentes} agendamento(s) pendente(s)'}), 409
+        
+        cur.execute("DELETE FROM horarios WHERE data = %s", (data_str,))
+        removidos = cur.rowcount
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'sucesso': True,
+            'mensagem': f'Todos os horários de {data_str} foram removidos',
+            'removidos': removidos
+        })
+    
+    # Remover horários específicos
+    removidos = 0
+    erros = []
+    for horario in horarios:
+        try:
+            datetime.strptime(horario, '%H:%M')
+        except ValueError:
+            erros.append(f'Horário inválido: {horario}')
+            continue
+        
+        # Verificar agendamento pendente
+        cur.execute(
+            "SELECT COUNT(*) as total FROM agendamentos WHERE data = %s AND horario = %s AND status = 'pendente'",
+            (data_str, horario)
+        )
+        pendentes = cur.fetchone()['total']
+        if pendentes > 0:
+            erros.append(f'{horario}: possui agendamento pendente')
+            continue
+        
+        cur.execute(
+            "DELETE FROM horarios WHERE data = %s AND horario = %s",
+            (data_str, horario)
+        )
+        removidos += cur.rowcount
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    resposta = {
+        'sucesso': len(erros) == 0,
+        'mensagem': f'{removidos} horário(s) removido(s)',
+        'removidos': removidos
+    }
+    if erros:
+        resposta['erros'] = erros
+    
+    status_code = 200 if len(erros) == 0 else 409
+    return jsonify(resposta), status_code
+
+
+@app.route('/api/admin/horarios/inicializar', methods=['POST'])
+def inicializar_horarios_mensal():
+    """Inicializa horarios padrao para o mes atual usando batch import"""
+    import calendar
+    hoje = date.today()
+    horarios_padrao = gerar_horarios_padrao()
+    
+    # Numero real de dias do mes
+    _, dias_no_mes = calendar.monthrange(hoje.year, hoje.month)
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Gerar todos os registros de uma vez com ON CONFLICT
+    registros = []
+    for dia in range(1, dias_no_mes + 1):
+        data_str = f'{hoje.year}-{hoje.month:02d}-{dia:02d}'
+        for h in horarios_padrao:
+            try:
+                data_obj = date(hoje.year, hoje.month, dia)
+                if data_obj.weekday() < 5:  # 0=seg, 6=dom
+                    registros.append((data_str, h['horario'], h['periodo']))
+            except ValueError:
+                continue
+    
+    if registros:
+        psycopg2.extras.execute_values(
+            cur,
+            """INSERT INTO horarios (data, horario, periodo, status, eh_ativo, criado_em) 
+               VALUES %s 
+               ON CONFLICT (data, horario) DO NOTHING""",
+            registros,
+            template="(%s::date, %s::time, %s, 'livre', TRUE, NOW())"
+        )
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'sucesso': True,
+        'mensagem': f'{len(registros)} horarios preparados para {hoje.month:02d}/{hoje.year} (dias uteis)'
     })
 
 
