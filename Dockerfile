@@ -1,4 +1,4 @@
-# Dockerfile raiz - Evolutiuon API (WhatsApp Monitor)
+# Dockerfile raiz - Evolution API (WhatsApp Monitor)
 # Redireciona pro Dockerfile.evolution dentro da pasta railway/
 
 FROM node:20-slim
@@ -19,6 +19,9 @@ RUN git clone https://github.com/EvolutionAPI/evolution-api.git .
 
 # Evolution API usa pnpm internamente mas npm tambem funciona
 RUN npm install --legacy-peer-deps
+
+# Gerar Prisma Client (necessário pro Evolution API funcionar)
+RUN npx prisma generate
 
 # Porta padrão
 EXPOSE 8080
