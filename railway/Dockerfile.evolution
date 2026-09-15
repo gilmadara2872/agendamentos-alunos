@@ -17,9 +17,8 @@ RUN npm install -g pnpm
 # Clonar Evolution API
 RUN git clone https://github.com/EvolutionAPI/evolution-api.git .
 
-# Evolution API usa pnpm internamente mas npm tambem funciona
-# pnpm bloqueia deps exoticas (libsignal via git) por padrao
-RUN npm install
+RUN pnpm config set block-exotic-subdeps false
+RUN pnpm install --no-frozen-lockfile
 
 # Porta padrão
 EXPOSE 8080
