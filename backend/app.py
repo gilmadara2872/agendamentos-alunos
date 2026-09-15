@@ -11,13 +11,19 @@ from auth import token_requerido, gerar_token, hash_senha
 app = Flask(__name__)
 CORS(app)
 
-# ===========================================
-# CONFIGURAÇÃO NEON (PostgreSQL)
-# ===========================================
+# ============================================
+# CONFIGURAÇÃO BANCO DE DADOS (PostgreSQL LOCAL)
+# ============================================
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL é obrigatório (neon.co ou railway)")
+    # Fallback para desenvolvimento local
+    DB_HOST = os.environ.get('DB_HOST', 'localhost')
+    DB_PORT = os.environ.get('DB_PORT', '5432')
+    DB_NAME = os.environ.get('DB_NAME', 'agendamento')
+    DB_USER = os.environ.get('DB_USER', 'agendamento')
+    DB_PASSWORD = os.environ.get('DB_PASSWORD', 'AgendamentoADS2026@#')
+    DATABASE_URL = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
 
 # ===========================================
 # DATABASE CONNECTOR
