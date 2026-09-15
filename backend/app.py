@@ -16,24 +16,30 @@ CORS(app)
 # ============================================
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
-if not DATABASE_URL:
-    # Fallback para desenvolvimento local
-    DB_HOST = os.environ.get('DB_HOST', 'localhost')
-    DB_PORT = os.environ.get('DB_PORT', '5432')
-    DB_NAME = os.environ.get('DB_NAME', 'agendamento')
-    DB_USER = os.environ.get('DB_USER', 'agendamento')
-    DB_PASSWORD = os.environ.get('DB_PASSWORD', 'AgendamentoADS2026@#')
-    DATABASE_URL = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+DB_HOST = os.environ.get('DB_HOST', '')
+DB_PORT = os.environ.get('DB_PORT', '5432')
+DB_NAME = os.environ.get('DB_NAME', 'agendamento')
+DB_USER = os.environ.get('DB_USER', 'agendamento')
+DB_PASSWORD = os.environ.get('DB_PASSWORD', 'AgendamentoADS2026@#')
 
-# ===========================================
+if not DATABASE_URL:
+    DB_HOST = os.environ.get('DB_HOST', 'localhost')
+
+# ============================================
 # DATABASE CONNECTOR
-# ===========================================
+# ============================================
 import psycopg2
 import psycopg2.extras
 
 def get_connection():
     """Cria conexão com PostgreSQL"""
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    if DATABASE_URL:
+        return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    return psycopg2.connect(
+        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+        user=DB_USER, password=DB_PASSWORD,
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
 
 # ===========================================
 # HORÁRIOS PADRÃO (8:30 - 12:00, 14:00 - 21:00)
