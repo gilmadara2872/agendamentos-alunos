@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react';
 interface Horario {
   horario: string;
   periodo: string;
-  disponivel: boolean;
   status: string;
+  id?: number;
+  data?: string;
+  observacao?: string;
+  eh_ativo?: boolean;
+  criado_em?: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -159,9 +163,9 @@ export default function Home() {
                       <button
                         key={h.horario}
                         onClick={() => handleAgendar(h.horario)}
-                        disabled={!h.disponivel}
+                        disabled={h.status !== 'livre'}
                         className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          h.disponivel
+                          h.status === 'livre'
                             ? 'bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer'
                             : h.status === 'bloqueado'
                             ? 'bg-red-100 text-red-800 cursor-not-allowed'
