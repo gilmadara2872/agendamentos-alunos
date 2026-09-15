@@ -17,3 +17,6 @@ Thumbs.db
 
 # Build
 *.log
+n8n/config/
+n8n/database.sqlite*
+n8n/nodes/

@@ -6,6 +6,7 @@ import os
 from datetime import datetime, date
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from auth import token_requerido, gerar_token, hash_senha
 
 app = Flask(__name__)
 CORS(app)
@@ -173,6 +174,7 @@ def agendar_atendimento():
 
 
 @app.route('/api/admin/agendamentos', methods=['GET'])
+@token_requerido
 def listar_agendamentos():
     """Lista agendamentos (admin)"""
     status = request.args.get('status', 'pendente')
@@ -198,6 +200,7 @@ def listar_agendamentos():
 
 
 @app.route('/api/admin/agendamentos/<int:id>', methods=['PATCH'])
+@token_requerido
 def atualizar_agendamento(id):
     """Atualiza status do agendamento"""
     dados = request.get_json()
@@ -226,6 +229,7 @@ def atualizar_agendamento(id):
 
 
 @app.route('/api/admin/horarios/bloquear', methods=['POST'])
+@token_requerido
 def bloquear_horario():
     """Bloqueia um horário específico"""
     dados = request.get_json()
@@ -267,6 +271,7 @@ def bloquear_horario():
 
 
 @app.route('/api/admin/horarios/liberar', methods=['POST'])
+@token_requerido
 def liberar_horario():
     """Libera um horário bloqueado"""
     dados = request.get_json()
@@ -296,6 +301,7 @@ def liberar_horario():
 
 
 @app.route('/api/admin/horarios/adicionar', methods=['POST'])
+@token_requerido
 def adicionar_horarios():
     """Adiciona horários de atendimento (um ou vários)"""
     dados = request.get_json()
@@ -366,6 +372,7 @@ def adicionar_horarios():
 
 
 @app.route('/api/admin/horarios/remover', methods=['POST'])
+@token_requerido
 def remover_horarios():
     """Remove horários de atendimento (um ou vários) de uma data"""
     dados = request.get_json()
@@ -451,6 +458,7 @@ def remover_horarios():
 
 
 @app.route('/api/admin/horarios/inicializar', methods=['POST'])
+@token_requerido
 def inicializar_horarios_mensal():
     """Inicializa horarios padrao para o mes atual usando batch import"""
     import calendar
@@ -613,6 +621,7 @@ def excluir_numero_sms(id):
 
 
 @app.route('/api/admin/stats', methods=['GET'])
+@token_requerido
 def estatisticas():
     """Retorna estatísticas do sistema"""
     conn = get_connection()
@@ -637,9 +646,9 @@ def estatisticas():
     })
 
 
-# ===========================================
+# ============================================
 # HEALTH CHECK
-# ===========================================
+# ============================================
 @app.route('/health', methods=['GET'])
 def health():
     """Verifica se API está funcionando"""
@@ -647,6 +656,104 @@ def health():
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
         'database': 'Neon PostgreSQL'
+    })
+
+
+# ============================================
+# AUTENTICACAO (JWT)
+# ============================================
+@app.route('/api/auth/registrar', methods=['POST'])
+def registrar_usuario():
+    """Registra o coordenador (primeiro usuario)"""
+    dados = request.get_json()
+    
+    nome = dados.get('nome', '').strip()
+    email = dados.get('email', '').strip().lower()
+    senha = dados.get('senha', '')
+    
+    if not nome or not email or not senha:
+        return jsonify({'erro': 'Nome, email e senha sao obrigatorios'}), 400
+    
+    if len(senha) < 4:
+        return jsonify({'erro': 'Senha deve ter pelo menos 4 caracteres'}), 400
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Verificar se ja existe
+    cur.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        return jsonify({'erro': 'Email ja cadastrado'}), 409
+    
+    # Criar usuario
+    cur.execute(
+        """INSERT INTO usuarios (nome, email, senha_hash, criado_em) 
+           VALUES (%s, %s, %s, NOW()) RETURNING id""",
+        (nome, email, hash_senha(senha))
+    )
+    usuario_id = cur.fetchone()['id']
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    token = gerar_token(usuario_id, nome)
+    
+    return jsonify({
+        'sucesso': True,
+        'mensagem': 'Coordenador registrado',
+        'token': token,
+        'usuario': {'id': usuario_id, 'nome': nome, 'email': email}
+    }), 201
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Login do coordenador"""
+    dados = request.get_json()
+    
+    email = dados.get('email', '').strip().lower()
+    senha = dados.get('senha', '')
+    
+    if not email or not senha:
+        return jsonify({'erro': 'Email e senha sao obrigatorios'}), 400
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        "SELECT id, nome, senha_hash FROM usuarios WHERE email = %s",
+        (email,)
+    )
+    usuario = cur.fetchone()
+    
+    if not usuario or usuario['senha_hash'] != hash_senha(senha):
+        cur.close()
+        conn.close()
+        return jsonify({'erro': 'Email ou senha incorretos'}), 401
+    
+    conn.close()
+    
+    token = gerar_token(usuario['id'], usuario['nome'])
+    
+    return jsonify({
+        'sucesso': True,
+        'token': token,
+        'usuario': {'id': usuario['id'], 'nome': usuario['nome'], 'email': email}
+    })
+
+
+@app.route('/api/auth/perfil', methods=['GET'])
+@token_requerido
+def perfil():
+    """Retorna dados do usuario logado"""
+    return jsonify({
+        'usuario': {
+            'id': request.usuario['usuario_id'],
+            'nome': request.usuario['nome']
+        }
     })
 
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 
 interface Agendamento {
   id: number;
@@ -15,19 +16,54 @@ interface Agendamento {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+// Helper para fazer fetch com token autenticado
+async function authedFetch(url: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('token');
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
 export default function Admin() {
+  const router = useRouter();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [status, setStatus] = useState('pendente');
   const [loading, setLoading] = useState(false);
+  const [usuario, setUsuario] = useState<{nome: string} | null>(null);
 
   useEffect(() => {
+    // Verificar se esta logado
+    const token = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('usuario');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+    if (storedUser) {
+      setUsuario(JSON.parse(storedUser));
+    }
     carregarAgendamentos();
-  }, [status]);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('usuario');
+    router.push('/login');
+  };
 
   const carregarAgendamentos = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/admin/agendamentos?status=${status}`);
+      const response = await authedFetch(`${API_URL}/api/admin/agendamentos?status=${status}`);
+      if (response.status === 401) {
+        handleLogout();
+        return;
+      }
       const dados = await response.json();
       setAgendamentos(dados.agendamentos || []);
     } catch (error) {
@@ -37,9 +73,13 @@ export default function Admin() {
     }
   };
 
+  useEffect(() => {
+    carregarAgendamentos();
+  }, [status]);
+
   const atualizarStatus = async (id: number, novoStatus: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/admin/agendamentos/${id}`, {
+      const response = await authedFetch(`${API_URL}/api/admin/agendamentos/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: novoStatus })
@@ -66,9 +106,24 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-indigo-700 text-white shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold">Painel da Coordenação</h1>
-          <p className="text-indigo-200 text-sm">Sistema de Agendamento ADS - UNINASSAU</p>
+        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Painel da Coordenação</h1>
+            <p className="text-indigo-200 text-sm">Sistema de Agendamento ADS - UNINASSAU</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {usuario && (
+              <span className="text-sm text-indigo-200">
+                Olá, <strong className="text-white">{usuario.nome}</strong>
+              </span>
+            )}
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-800 rounded-lg text-sm font-medium transition-colors"
+            >
+              Sair
+            </button>
+          </div>
         </div>
       </header>
 
