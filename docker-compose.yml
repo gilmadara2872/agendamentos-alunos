@@ -13,8 +13,7 @@ services:
       - "5001:5000"
     environment:
       - PORT=5000
-      - SUPABASE_URL=https://SEU_PROJETO.supabase.co
-      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      - DATABASE_URL=postgresql://neondb_owner:npg_XneA2h7WzwGM@ep-divine-block-aewdoe8h-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       - TOTAL_VOICE_URL=https://api2.totalvoice.com.br
       - TOTAL_VOICE_API_KEY=sua_chave_aqui
     volumes:
