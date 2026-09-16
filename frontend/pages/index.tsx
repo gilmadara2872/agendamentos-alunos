@@ -1,24 +1,13 @@
 import Head from 'next/head';
 import { useEffect, useState } from 'react';
-
-interface Horario {
-  horario: string;
-  periodo: string;
-  status: string;
-  id?: number;
-  data?: string;
-  observacao?: string;
-  eh_ativo?: boolean;
-  criado_em?: string;
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { supabase, Horario } from '../lib/supabase';
 
 export default function Home() {
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
 
   useEffect(() => {
     carregarHorarios();
@@ -27,9 +16,15 @@ export default function Home() {
   const carregarHorarios = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/horarios?data=${data}`);
-      const dados = await response.json();
-      setHorarios(dados.horarios || []);
+      const { data: dados, error } = await supabase
+        .from('horarios')
+        .select('*')
+        .eq('data', data)
+        .eq('status', 'livre')
+        .order('hora');
+      
+      if (error) throw error;
+      setHorarios(dados || []);
       setErro('');
     } catch (error) {
       setErro('Erro ao carregar horários');
@@ -39,7 +34,7 @@ export default function Home() {
     }
   };
 
-  const handleAgendar = async (horario: string) => {
+  const handleAgendar = async (horario: Horario) => {
     const nome = prompt('Seu nome:');
     if (!nome) return;
 
@@ -51,28 +46,27 @@ export default function Home() {
     const motivo = prompt('Motivo do atendimento:') || '';
 
     try {
-      const response = await fetch(`${API_URL}/api/agendar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome,
-          matricula,
-          email,
-          telefone,
-          motivo,
-          data,
-          horario
-        })
-      });
+      const { data: aluno, error: alunoError } = await supabase
+        .from('alunos')
+        .upsert({ nome, matricula, email, telefone })
+        .select()
+        .single();
 
-      const dados = await response.json();
-      
-      if (response.ok) {
-        alert(dados.mensagem);
-        carregarHorarios();
-      } else {
-        alert(dados.erro || 'Erro ao agendar');
-      }
+      if (alunoError) throw alunoError;
+
+      const { error: agendamentoError } = await supabase
+        .from('agendamentos')
+        .insert({
+          aluno_id: aluno.id,
+          horario_id: horario.id,
+          motivo,
+          status: 'pendente'
+        });
+
+      if (agendamentoError) throw agendamentoError;
+
+      setSucesso(`Agendamento realizado para ${horario.hora}!`);
+      carregarHorarios();
     } catch (error) {
       alert('Erro ao agendar. Tente novamente.');
     }
@@ -93,8 +87,8 @@ export default function Home() {
   };
 
   const horariosPorPeriodo = horarios.reduce((acc, h) => {
-    if (!acc[h.periodo]) acc[h.periodo] = [];
-    acc[h.periodo].push(h);
+    if (!acc[h.turno]) acc[h.turno] = [];
+    acc[h.turno].push(h);
     return acc;
   }, {} as Record<string, Horario[]>);
 
@@ -137,6 +131,12 @@ export default function Home() {
           </div>
         </div>
 
+        {sucesso && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <p className="text-green-600 text-sm">{sucesso}</p>
+          </div>
+        )}
+
         {erro && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
             <p className="text-red-600 text-sm">{erro}</p>
@@ -149,7 +149,7 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(horariosPorPeriodo).map(([periodo, h]) => (
+            {Object.entries(horariosPorPeriodo).map(([periodo, hs]) => (
               <div key={periodo} className="bg-white rounded-xl shadow-sm overflow-hidden">
                 <div className="px-4 py-3 bg-gray-50 border-b">
                   <h3 className="font-medium text-gray-800 flex items-center gap-2">
@@ -159,20 +159,13 @@ export default function Home() {
                 </div>
                 <div className="p-4">
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {h.map((h) => (
+                    {hs.map((h) => (
                       <button
-                        key={h.horario}
-                        onClick={() => handleAgendar(h.horario)}
-                        disabled={h.status !== 'livre'}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          h.status === 'livre'
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer'
-                            : h.status === 'bloqueado'
-                            ? 'bg-red-100 text-red-800 cursor-not-allowed'
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
+                        key={h.id}
+                        onClick={() => handleAgendar(h)}
+                        className="px-3 py-2 rounded-lg text-sm font-medium transition-all bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer"
                       >
-                        {h.horario}
+                        {h.hora}
                       </button>
                     ))}
                   </div>
@@ -198,10 +191,6 @@ export default function Home() {
               <span className="text-sm text-gray-600">Disponível</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-red-100 rounded border border-red-300"></div>
-              <span className="text-sm text-gray-600">Bloqueado</span>
-            </div>
-            <div className="flex items-center gap-2">
               <div className="w-6 h-6 bg-gray-100 rounded border border-gray-300"></div>
               <span className="text-sm text-gray-600">Ocupado</span>
             </div>
@@ -209,10 +198,7 @@ export default function Home() {
         </div>
 
         <div className="mt-6 text-center">
-          <a
-            href="/admin"
-            className="text-sm text-indigo-600 hover:underline"
-          >
+          <a href="/admin" className="text-sm text-indigo-600 hover:underline">
             Acesso da Coordenação →
           </a>
         </div>

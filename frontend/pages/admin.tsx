@@ -1,71 +1,41 @@
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-
-interface Agendamento {
-  id: number;
-  nome: string;
-  matricula: string;
-  email: string;
-  telefone: string;
-  data: string;
-  horario: string;
-  motivo: string;
-  status: string;
-  criado_em: string;
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
-// Helper para fazer fetch com token autenticado
-async function authedFetch(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-}
+import { supabase, Agendamento, Horario } from '../lib/supabase';
 
 export default function Admin() {
-  const router = useRouter();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [agendamentos, setAgendamentos] = useState<(Agendamento & { alunos: any; horarios: any })[]>([]);
   const [status, setStatus] = useState('pendente');
   const [loading, setLoading] = useState(false);
-  const [usuario, setUsuario] = useState<{nome: string} | null>(null);
+  const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
-    // Verificar se esta logado
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('usuario');
-    if (!token) {
-      router.push('/login');
-      return;
+    const auth = localStorage.getItem('admin_auth');
+    if (auth === 'true') {
+      setLoggedIn(true);
+      carregarAgendamentos();
     }
-    if (storedUser) {
-      setUsuario(JSON.parse(storedUser));
-    }
-    carregarAgendamentos();
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('usuario');
-    router.push('/login');
-  };
+  useEffect(() => {
+    if (loggedIn) {
+      carregarAgendamentos();
+    }
+  }, [status, loggedIn]);
 
   const carregarAgendamentos = async () => {
     setLoading(true);
     try {
-      const response = await authedFetch(`${API_URL}/api/admin/agendamentos?status=${status}`);
-      if (response.status === 401) {
-        handleLogout();
-        return;
-      }
-      const dados = await response.json();
-      setAgendamentos(dados.agendamentos || []);
+      const { data, error } = await supabase
+        .from('agendamentos')
+        .select(`
+          *,
+          alunos (*),
+          horarios (*)
+        `)
+        .eq('status', status)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAgendamentos(data || []);
     } catch (error) {
       console.error('Erro:', error);
     } finally {
@@ -73,31 +43,89 @@ export default function Admin() {
     }
   };
 
-  useEffect(() => {
-    carregarAgendamentos();
-  }, [status]);
-
-  const atualizarStatus = async (id: number, novoStatus: string) => {
+  const atualizarStatus = async (id: string, novoStatus: string) => {
     try {
-      const response = await authedFetch(`${API_URL}/api/admin/agendamentos/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: novoStatus })
-      });
+      const { error } = await supabase
+        .from('agendamentos')
+        .update({ status: novoStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
 
-      if (response.ok) {
-        carregarAgendamentos();
-      }
+      if (error) throw error;
+      carregarAgendamentos();
     } catch (error) {
       console.error('Erro:', error);
     }
   };
 
+  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const senha = formData.get('senha') as string;
+
+    if (email === 'desousabarbosafilho@gmail.com' && senha === 'TesteADS2026@') {
+      localStorage.setItem('admin_auth', 'true');
+      setLoggedIn(true);
+      carregarAgendamentos();
+    } else {
+      alert('Credenciais inválidas');
+    }
+  };
+
+  if (!loggedIn) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-indigo-700 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-white font-bold text-2xl">A</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Acesso da Coordenação</h1>
+            <p className="text-gray-500 text-sm mt-2">Sistema de Agendamento ADS - UNINASSAU</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                name="email"
+                type="email"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                placeholder="coordenador@uninassau.edu.br"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+              <input
+                name="senha"
+                type="password"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                placeholder="••••"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700"
+            >
+              Entrar
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <a href="/" className="text-sm text-indigo-600 hover:underline">← Voltar para agendamento</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const statusBadge = (s: string) => {
     const colors: Record<string, string> = {
       pendente: 'bg-yellow-100 text-yellow-800',
       confirmado: 'bg-green-100 text-green-800',
-      recusado: 'bg-red-100 text-red-800',
+      cancelado: 'bg-red-100 text-red-800',
       realizado: 'bg-blue-100 text-blue-800'
     };
     return colors[s] || 'bg-gray-100 text-gray-800';
@@ -106,38 +134,21 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-indigo-700 text-white shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">Painel da Coordenação</h1>
-            <p className="text-indigo-200 text-sm">Sistema de Agendamento ADS - UNINASSAU</p>
-          </div>
-          <div className="flex items-center gap-4">
-            {usuario && (
-              <span className="text-sm text-indigo-200">
-                Olá, <strong className="text-white">{usuario.nome}</strong>
-              </span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-800 rounded-lg text-sm font-medium transition-colors"
-            >
-              Sair
-            </button>
-          </div>
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold">Painel da Coordenação</h1>
+          <p className="text-indigo-200 text-sm">Sistema de Agendamento ADS - UNINASSAU</p>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
           <div className="flex gap-2 flex-wrap">
-            {['pendente', 'confirmado', 'recusado', 'realizado'].map((s) => (
+            {['pendente', 'confirmado', 'cancelado', 'realizado'].map((s) => (
               <button
                 key={s}
                 onClick={() => setStatus(s)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${
-                  status === s
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  status === s ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
                 {s}
@@ -157,20 +168,20 @@ export default function Admin() {
         ) : (
           <div className="grid gap-4">
             {agendamentos.map((a) => (
-              <div key={a.id} className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow">
+              <div key={a.id} className="bg-white rounded-xl shadow-sm p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-gray-900">{a.nome}</h3>
+                      <h3 className="font-semibold text-gray-900">{a.alunos?.nome}</h3>
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadge(a.status)}`}>
                         {a.status}
                       </span>
                     </div>
                     <div className="text-sm text-gray-600 space-y-1">
-                      <p>Matrícula: {a.matricula}</p>
-                      {a.email && <p>Email: {a.email}</p>}
-                      {a.telefone && <p>Telefone: {a.telefone}</p>}
-                      <p>Data: {a.data} às {a.horario}</p>
+                      <p>Matrícula: {a.alunos?.matricula}</p>
+                      {a.alunos?.email && <p>Email: {a.alunos?.email}</p>}
+                      {a.alunos?.telefone && <p>Telefone: {a.alunos?.telefone}</p>}
+                      <p>Data: {a.horarios?.data} às {a.horarios?.hora}</p>
                       {a.motivo && <p>Motivo: {a.motivo}</p>}
                     </div>
                   </div>
@@ -184,7 +195,7 @@ export default function Admin() {
                           Confirmar
                         </button>
                         <button
-                          onClick={() => atualizarStatus(a.id, 'recusado')}
+                          onClick={() => atualizarStatus(a.id, 'cancelado')}
                           className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
                         >
                           Recusar
