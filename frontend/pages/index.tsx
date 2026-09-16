@@ -191,11 +191,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-8 text-center">
-          <a href="/admin" className="text-lg text-indigo-600 hover:underline">
-            ← Acesso da Coordenação
-          </a>
-        </div>
+
       </main>
     </div>
   );

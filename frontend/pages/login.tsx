@@ -73,9 +73,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-8 text-center">
-          <a href="/" className="text-lg text-indigo-600 hover:underline">← Voltar para agendamento</a>
-        </div>
+
       </div>
     </div>
   );
