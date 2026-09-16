@@ -1,4 +1,3 @@
-import Head from 'next/head';
 import { useEffect, useState } from 'react';
 import { supabase, Horario } from '../lib/supabase';
 
@@ -94,76 +93,71 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Head>
-        <title>Agendamento ADS - UNINASSAU</title>
-        <meta name="description" content="Agende seu atendimento com o coordenador de ADS" />
-      </Head>
-
       <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">A</span>
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-center gap-4 mb-2">
+            <div className="w-14 h-14 bg-indigo-600 rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-2xl">A</span>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Agendamento ADS</h1>
-              <p className="text-sm text-gray-500">UNINASSAU Teresina</p>
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-900">Agendamento ADS</h1>
+              <p className="text-base text-gray-500">UNINASSAU Teresina</p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Bem-vindo(a)!</h2>
-          <p className="text-gray-600 text-sm mb-4">
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-4 text-center">Bem-vindo(a)!</h2>
+          <p className="text-gray-600 text-lg text-center mb-6">
             Escolha o melhor horário para seu atendimento com o coordenador do curso de Análise e Desenvolvimento de Sistemas.
           </p>
           
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700">Data:</label>
+          <div className="flex items-center justify-center gap-4">
+            <label className="text-lg font-medium text-gray-700">Data:</label>
             <input
               type="date"
               value={data}
               onChange={(e) => setData(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
             />
           </div>
         </div>
 
         {sucesso && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <p className="text-green-600 text-sm">{sucesso}</p>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+            <p className="text-green-600 text-lg text-center">{sucesso}</p>
           </div>
         )}
 
         {erro && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <p className="text-red-600 text-sm">{erro}</p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+            <p className="text-red-600 text-lg text-center">{erro}</p>
           </div>
         )}
 
         {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
             {Object.entries(horariosPorPeriodo).map(([periodo, hs]) => (
               <div key={periodo} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 border-b">
-                  <h3 className="font-medium text-gray-800 flex items-center gap-2">
+                <div className="px-6 py-4 bg-gray-50 border-b">
+                  <h3 className="text-xl font-medium text-gray-800 flex items-center justify-center gap-2">
                     <span>{periodoIcon(periodo)}</span>
                     <span>{periodoNome(periodo)}</span>
                   </h3>
                 </div>
-                <div className="p-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <div className="p-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                     {hs.map((h) => (
                       <button
                         key={h.id}
                         onClick={() => handleAgendar(h)}
-                        className="px-3 py-2 rounded-lg text-sm font-medium transition-all bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer"
+                        className="px-4 py-3 rounded-lg text-lg font-medium transition-all bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer"
                       >
                         {h.hora}
                       </button>
@@ -174,8 +168,8 @@ export default function Home() {
             ))}
 
             {Object.keys(horariosPorPeriodo).length === 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-                <p className="text-yellow-800">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                <p className="text-yellow-800 text-lg">
                   Nenhum horário disponível para esta data. Tente outra data ou entre em contato com a coordenação.
                 </p>
               </div>
@@ -183,23 +177,23 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-8 bg-white rounded-xl shadow-sm p-6">
-          <h3 className="font-semibold text-gray-800 mb-3">Legenda</h3>
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-green-100 rounded border border-green-300"></div>
-              <span className="text-sm text-gray-600">Disponível</span>
+        <div className="mt-10 bg-white rounded-xl shadow-sm p-8">
+          <h3 className="text-xl font-semibold text-gray-800 mb-4 text-center">Legenda</h3>
+          <div className="flex flex-wrap justify-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-green-100 rounded border border-green-300"></div>
+              <span className="text-lg text-gray-600">Disponível</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-gray-100 rounded border border-gray-300"></div>
-              <span className="text-sm text-gray-600">Ocupado</span>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gray-100 rounded border border-gray-300"></div>
+              <span className="text-lg text-gray-600">Ocupado</span>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 text-center">
-          <a href="/admin" className="text-sm text-indigo-600 hover:underline">
-            Acesso da Coordenação →
+        <div className="mt-8 text-center">
+          <a href="/admin" className="text-lg text-indigo-600 hover:underline">
+            ← Acesso da Coordenação
           </a>
         </div>
       </main>
