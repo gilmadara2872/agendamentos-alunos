@@ -20,3 +20,4 @@ Thumbs.db
 n8n/config/
 n8n/database.sqlite*
 n8n/nodes/
+.vercel
